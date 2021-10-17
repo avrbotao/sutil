@@ -1,0 +1,25 @@
+
+This is the README file for project 'sutil' by Alexandre Botao (botao.org)
+
+'sutil' is a collection of programs designed to assist, expedite, optimize and improve technical support and system administration efficiency on unix and linux platforms.
+
+some of these programs (eg. 'vdt', 'swet', 'pha') have their separate websites - with the same [or updated] source code found here.
+
+*** the 'gnu-toolchain'-like stuff found here is intended for very old environments where the 'true-gnu' toolchain didn't fit (back in the day) ***
+
+anyway, just cd to the 'bud' directory and pretend it's gnu:
+
+./configure
+make
+make install
+
+*** to refresh:
+
+make clean
+./configure -c
+./configure -u
+
+
+
+alexandre botao
+'2015
