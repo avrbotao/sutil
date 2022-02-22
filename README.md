@@ -1,3 +1,0 @@
-# sutil
-
-support utility toolset
