@@ -1,0 +1,9 @@
+
+	lax.sh is a shell script for system administration
+
+	( intended to be run as root or thru sudo )
+
+	lax.sh lists users on /etc/passwd with active/blocked and password-aging/never-expires status marks
+
+alexandre botao
+
