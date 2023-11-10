@@ -16,8 +16,8 @@ use warnings;
 
 
 my $SWNAME="sshdconfctl.pl";
-my $SWVERS="1.0.9";
-my $SWDATE="2023-11-08";
+my $SWVERS="1.0.11";
+my $SWDATE="2023-11-09";
 my $SWTIME="00:00:00";
 my $SWDESC="sshd config control";
 my $SWTAGS="sshd,config,control";
@@ -50,12 +50,13 @@ my $SWMAIL="alexandre at botao dot org";
 #
 
 my @conflines;
+my @lesslines;
 my @morelines;
 
 #______________________________________________________________________________
 #
 
-sub dumpwhis {
+sub dumpcond {
 	foreach (@conflines) {
 		next if /^$/;
 		if ( /^\s+#/ ) {
@@ -64,6 +65,7 @@ sub dumpwhis {
 			print "$_\n" if /^\s+/;
 		}
 	}
+	exit(0);
 }
 
 sub dumparms {
@@ -71,6 +73,7 @@ sub dumparms {
 		next if /^$/;
 		print "$_\n" if ! /^#/;
 	}
+	exit(0);
 }
 
 sub dumpcomm {
@@ -82,6 +85,7 @@ sub dumpcomm {
 			print "$_\n" if /^#/;
 		}
 	}
+	exit(0);
 }
 
 sub dumpfull {
@@ -91,23 +95,27 @@ sub dumpfull {
 	print "===\n";
 	print "$report\n";
 	print "===\n";
+	exit(0);
 }
 
 sub usage {
-	print "use: $0 [options]\n";
-	print "--allowuser=\"list\"    add global AllowUsers list\n";
+	print "\nuse: $0 [options]\n\noptions:\n\n";
+	print "--allowuser=\"list\"      add global AllowUsers list\n";
+	print "--cond                  print sshd config conditional actions\n";
 	print "--conf=<path>           input sshd config from <pathname>\n";
-	print "--comm                  print sshd config comment lines\n";
+	print "--comments              print all comment lines or include comment lines in search\n";
 	print "--dump                  print all sshd config lines\n";
 	print "--diff                  run diff after changes\n";
 	print "--help                  print usage syntax and exit\n";
+	print "--label=\"list\"          print changes by reason label(s)\n";
 	print "--parms                 print sshd config params\n";
-	print "--reason=\"text\"       action description text\n";
+	print "--purge=\"list\"          remove changes by reason label(s)\n";
+	print "--reason=\"text\"         action description text\n";
 	print "--save=<path>           output changed sshd config to <filename>\n";
-	print "--space                 print sshd config conditional actions\n";
-	print "--srch=\"list\"         search sshd config param(s)\n";
-	print "--sshd=<path>           use sshd binary on <pathname>\n";
+	print "--search=\"list\"         search sshd config param(s)\n";
+	print "--sshd=<path>           use alternate sshd binary on <pathname>\n";
 	print "--test                  check new sshd config sanity\n";
+	print "--verbose               detailed output\n";
 	exit(0);
 }
 
@@ -118,27 +126,72 @@ use Getopt::Long;
 
 GetOptions(
   'allowuser=s'		=> \my $ausrlist,
+  'cond'			=> \my $condflag,
   'conf=s'			=> \my $confname,
-  'comm'			=> \my $commflag,
+  'comments'		=> \my $commflag,
   'dump'			=> \my $dumpflag,
   'diff'			=> \my $diffflag,
   'help'			=> \my $helpflag,
+  'label=s'			=> \my $labelstr,
   'parms'			=> \my $parmsflag,
+  'purge=s'			=> \my $purgelist,
   'reason=s'		=> \my $reasonstr,
   'save=s'			=> \my $savename,
-  'space'			=> \my $spaceflag,
-  'srch=s'			=> \my $srchlist,
+  'search=s'		=> \my $srchlist,
   'sshd=s'			=> \my $sshdname,
   'test'			=> \my $testflag,
-  'verb'			=> \my $verbflag,
-) or die ">>> $0: invalid options\n";
+  'verbose'			=> \my $verbflag,
+) or die "\n>>> $0: invalid option(s)\n\n";
+
+#______________________________________________________________________________
+#
+
+my $fileorder = 1;
+
+sub showlabel {
+	if ( $labelstr =~ /all/i ) { $labelstr = ".*" }
+	if ( $fileorder ) {
+		foreach my $lin (@conflines) {
+			next if $lin =~ /^$/;
+			my @labelvect = split /[,\s]+/ , $labelstr;
+			foreach my $pat (@labelvect) {
+				if ($lin =~ /begin.*:$pat:/ .. $lin =~ /e_n_d.*:$pat:/) {
+					print "$lin\n"; push(@lesslines, $lin) if $purgelist; last;
+				}
+			}
+		}
+	} else { # pattern order
+		my @labelvect = split /[,\s]+/ , $labelstr;
+		foreach my $pat (@labelvect) {
+			foreach (@conflines) {
+				if ( /begin.*:$pat:/ .. /e_n_d.*:$pat:/ ) {
+					#if (/begin/../e_n_d/) {
+					#next if /begin/ || /e_n_d/;
+					print "$_\n";
+				}
+			}
+		}
+	}
+	exit(0) if not $purgelist;
+}
+
+#______________________________________________________________________________
+#
+
+sub purgelabel {
+	$labelstr = $purgelist;
+	showlabel;
+	my %lessvect = map { $_ => 1 } @lesslines;
+	@conflines = grep { ! $lessvect{$_} } @conflines;
+}
 
 #______________________________________________________________________________
 #
 
 sub srchthis {
 	foreach my $lin (@conflines) {
-		next if $lin =~ /^$/ or $lin =~ /^#/ or $lin =~ /^\s+#/;
+		next if $lin =~ /^$/;
+		if ( ! $commflag ) { next if $lin =~ /^#/ or $lin =~ /^\s+#/; }
 		my @srchvect = split /[,\s]+/ , $srchlist;
 		foreach my $pat (@srchvect) {
 			if ( $lin =~ /$pat/i ) {
@@ -146,6 +199,7 @@ sub srchthis {
 			}
 		}
 	}
+	exit(0);
 }
 
 #______________________________________________________________________________
@@ -175,7 +229,7 @@ sub addallowuser {
 		push(@morelines, "AllowUsers $ausrlist");
 		push(@morelines, "# e_n_d sshdconfctl global AllowUsers (:$reasonstr:) $ymdhms\n");
 	} else {
-		print STDERR ">>> $0: action requires --reason option\n"; usage;
+		print STDERR "\n>>> $0: action requires --reason option\n"; usage;
 	}
 }
 
@@ -185,13 +239,13 @@ sub addallowuser {
 usage if $helpflag;
 
 if ( ! $confname ) {
-	print STDERR ">>> $0: missing config filename\n"; usage;
+	print STDERR "\n>>> $0: missing config filename\n"; usage;
 }
 
 my $CFH;
 
 unless (open $CFH, "<", $confname) {
-	print STDERR ">>> $0: can't open '< $confname': $!\n"; exit(1);
+	print STDERR "\n>>> $0: can't open '< $confname': $!\n"; exit(1);
 }
 
 chomp(@conflines = <$CFH>);
@@ -200,14 +254,24 @@ unless (close $CFH) {
 	print STDERR ">>> $0: error closing '$confname': $!\n"; exit(1);
 }
 
+#______________________________________________________________________________
+#
+
 dumpfull if $dumpflag;
-dumpcomm if $commflag;
+dumpcomm if $commflag and not $srchlist;
 dumparms if $parmsflag;
-dumpwhis if $spaceflag;
+dumpcond if $condflag;
 
 srchthis if $srchlist;
 
+showlabel if $labelstr;
+
+purgelabel if $purgelist;
+
 addallowuser if $ausrlist;
+
+#______________________________________________________________________________
+#
 
 if ( $savename ) {
 	my $SFH;
@@ -220,11 +284,11 @@ if ( $savename ) {
 		my( @index )= grep { $conflines[$_] =~ /^Match/i } 0..$#conflines;
 		if ( $#index ) {
 			if ( @index ) {
-				print "Index : @index\n" if ($verbflag);
+				print "Index : @index\n" if ($verbflag and 0);
 			}
 			if ( $index[0] ) {
 				my $mark = $index[0];
-				print "mark = $mark\n" if ($verbflag);
+				print "mark = $mark\n" if ($verbflag and 0);
 				splice @conflines, $mark, 0, @morelines;
 			}
 		} else {
@@ -239,6 +303,7 @@ if ( $savename ) {
 	}
 
 	if ( $testflag ) {
+		print "... test:\n" if $verbflag;
 		my $output = `sshd -f $savename -t 2>&1`;
 		if ( $output ) {
 			print "$output\n";
@@ -246,6 +311,7 @@ if ( $savename ) {
 	}
 
 	if ( $diffflag ) {
+		print "... diff:\n" if $verbflag;
 		my $output = `diff $savename $confname 2>&1`;
 		if ( $output ) {
 			print "$output\n";
